@@ -6,7 +6,7 @@ from IPython import embed
 import numpy as np
 import pandas as pd
 
-def simulate_data(*, N=10000, K=3, sigma_alpha=0.05,sigma_beta=10):
+def simulate_data(*, N=10000, K=10, sigma_alpha=0.05,sigma_beta=10):
 
     # Generate treatments (D) as randomly assigned multinomial with K categories
     D = np.random.choice(range(K), size=N, p=np.ones(K)/K)  # differentially popular
@@ -36,70 +36,28 @@ def simulate_data(*, N=10000, K=3, sigma_alpha=0.05,sigma_beta=10):
 
 ##
 np.random.seed(1234)
-micro, clp, alpha, beta = simulate_data()
+K=10
+micro, clp, alpha, beta = simulate_data(K=K)
 
 ###
 import pymc as pm
 import arviz as az
 import matplotlib.pyplot as plt
-y, N = clp['Y'], len(clp)
 
-# Model
 with pm.Model() as model:
-    mu = pm.Normal('mu', 0, 10)
-    sigma = pm.HalfNormal('sigma', 1)
-    y = pm.Normal('y', mu, sigma, observed=clp['Y'])
+    intercept = pm.Normal('intercept', mu=0, sigma=100)
+    slope = pm.Normal('slope', mu=0, sigma=100)
+    Y_mean = intercept 
+    for k in range(K):
+        Y_mean = Y_mean + slope*clp[f'A{k}']
+    Y_sigma = pm.HalfNormal('Y_sigma', sigma=1)
+    likelihood = pm.Normal('Y', mu=Y_mean, sigma=Y_sigma, observed=clp['Y'])
     idata = pm.sample(1000)
-
-fig = az.plot_trace(idata)
-plt.savefig('idata.png')
 
 az.summary(idata)
 
+fig = az.plot_trace(idata)
+plt.savefig('trace.png')
 
-trace 
-# Displaying the parameters
-print('Mean:', trace['mu'].mean())
-print('Variance:', trace['sigma'].var())
-
-
-###
-# Run STAN
-import pystan
-
-y, N = clp['Y'], len(clp)
-# Write the Stan model.
-model = """
-data {
-  int<lower=0> N;
-  real y[N];
-}
-
-parameters {
-  real mu;
-  real<lower=0> sigma;
-}
-
-model {
-  y ~ normal(mu, sigma);
-}
-"""
-
-# Compile the Stan model.
-model_code = pystan.StanModel(model_code=model)
-
-# Sample from the posterior distribution.
-samples = model_code.sample(data={"N": 100, "x": [1, 2, 3, 4, 5]})
-
-# Estimate the parameters of the Gaussian distribution.
-mean = samples["mu"].mean()
-variance = samples["sigma"].var()
-
-# Print the results.
-print("Mean:", mean)
-print("Variance:", variance)
-
-# Plot results
-
-
-
+fig = az.plot_posterior(idata)
+plt.savefig('posterior.png')
